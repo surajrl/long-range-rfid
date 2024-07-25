@@ -26,7 +26,7 @@ void interruptHandler(void)
     auto t1 = std::chrono::high_resolution_clock::now();
     if ((t1 - PREVT).count() > 180000)
     {
-        // std::cout << (t1 - PREVT).count() << "\n";
+        std::cout << (t1 - PREVT).count() << "\n";
     }
     PREVT = t1;
 
@@ -56,25 +56,25 @@ bool readFile(const std::string &filepath)
         return false;
     }
 
-    // Add preamble
-    MSG.insert(MSG.begin(), std::make_move_iterator(PREAMBLE.begin()), std::make_move_iterator(PREAMBLE.end()));
-
     // Read the file byte by byte
     char byte;
     while (file.read(&byte, sizeof(byte)))
     {
         // Convert the byte into bits
-        std::bitset<8> bitset(byte);
+        std::bitset<8> bits(byte);
 
         // Store each bit in the vector
         for (int i = 7; i >= 0; --i)
         {
             // Access bits from MSB to LSB
-            MSG.push_back(bitset[i]);
+            MSG.push_back(bits[i]);
         }
     }
 
     file.close();
+
+    std::cout << "File size: " << MSG.size() << " bits\n";
+
     return true;
 }
 
@@ -120,7 +120,7 @@ int main(int argc, char **argv)
     signal(SIGINT, signalHandler);
 
 #if DEBUG
-    std::cout << "wiringPiSetupGpio.\n";
+    std::cout << "wiringPiSetupGpio\n";
 #else
     wiringPiSetupGpio();
     pinMode(DATA_PIN, OUTPUT);
@@ -128,17 +128,29 @@ int main(int argc, char **argv)
 #endif
 
     // Read bit stream from .lyra file
-    const std::string filepath = "/home/suraj/dev/long-range-rfid/testdata/text_example.txt";
+    const std::string filepath = "/home/suraj/dev/long-range-rfid/sample3_16kHz.lyra";
     if (!readFile(filepath))
     {
         std::cerr << "Failed to open file.\n";
         return -1;
     }
+
+    // Prepend size (in bits) of actual message
+    std::bitset<16> msg_size_bits(MSG.size());
+    std::vector<int> vec(msg_size_bits.size());
+    for (int i = msg_size_bits.size() - 1; i >= 0; --i)
+    {
+        vec[msg_size_bits.size() - i - 1] = msg_size_bits[i];
+    }
+    MSG.insert(MSG.begin(), vec.begin(), vec.end());
+    // Preprend preamble
+    MSG.insert(MSG.begin(), std::make_move_iterator(PREAMBLE.begin()), std::make_move_iterator(PREAMBLE.end()));
+
     for (const int &num : MSG)
     {
-        std::cout << num << " ";
+        std::cout << num; // Debugging
     }
-    std::cout << "\nLyra file (" << MSG.size() << " bits) read into memory.\n";
+    std::cout << "\nData to send: " << MSG.size() << " bits\n";
 
 #if DEBUG
     setNonBlockingMode(); // Configure terminal for non-blocking input
